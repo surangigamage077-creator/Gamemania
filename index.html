@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>GameMania - Car Racing</title>
+<style>
+:root{--bg:#101522;--panel:#1b2436;--text:#f5f7ff;--accent:#42e8a5;--danger:#ff5263}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#101522,#18243a);color:var(--text);font-family:system-ui,Arial,sans-serif;text-align:center;min-height:100vh}
+header{padding:16px 12px 6px}h1{margin:0;font-size:clamp(24px,6vw,36px);letter-spacing:1px}h1 span{color:var(--accent)}p{margin:6px 0 12px;color:#c2cbe0}
+.wrap{width:min(100%,560px);margin:auto;padding:0 12px 20px}.panel{background:var(--panel);border:1px solid #34415a;border-radius:16px;padding:12px;margin:10px 0}
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.btn{border:0;border-radius:11px;padding:12px 8px;font-weight:800;font-size:14px;background:#303d55;color:white;cursor:pointer}.btn.active{background:var(--accent);color:#071b14}.btn.primary{background:var(--accent);color:#071b14}.stats{display:flex;justify-content:space-around;gap:8px;font-weight:700}.stats small{display:block;color:#aab8d0;font-size:11px}.stats strong{font-size:20px}
+#gameBox{position:relative;margin:10px auto 0;width:min(100%,420px);overflow:hidden;border-radius:14px;border:2px solid #45536b;background:#202936;touch-action:none}
+canvas{display:block;width:100%;height:auto;aspect-ratio:3/5;touch-action:none}
+.overlay{position:absolute;inset:0;background:#09101dcc;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;gap:10px}
+.overlay h2{margin:0;font-size:28px}.overlay p{line-height:1.45}.hidden{display:none!important}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.control{padding:15px 8px;border:1px solid #52627d;border-radius:14px;background:#26334b;color:#fff;font-size:16px;font-weight:800;touch-action:none;user-select:none}
+.control:active{background:#3b506f}.hint{font-size:12px;color:#aab8d0;margin-top:10px;line-height:1.5}
+footer{color:#8493ad;font-size:12px;padding:10px}
+</style>
+</head>
+<body>
+<header><h1>🏁 GAME<span>MANIA</span></h1><p>CAR RACING • Choose your race mode</p></header>
+<main class="wrap">
+ <section class="panel">
+  <div class="modes">
+   <button class="btn active" data-mode="bot">🤖 Bot Mode</button>
+   <button class="btn" data-mode="solo">🏎️ Solo</button>
+   <button class="btn" data-mode="two">👥 2 Players</button>
+  </div>
+ </section>
+ <section class="panel stats">
+  <div><small>SCORE</small><strong id="score">0</strong></div>
+  <div><small>BEST THIS SESSION</small><strong id="best">0</strong></div>
+  <div><small>SPEED</small><strong id="speed">0</strong></div>
+ </section>
+ <div id="gameBox">
+  <canvas id="game" width="360" height="600" aria-label="Car racing game"></canvas>
+  <div class="overlay" id="overlay">
+   <h2 id="overlayTitle">Ready to Race?</h2>
+   <p id="overlayText">Dodge traffic and collect points. Use the buttons below or your keyboard.</p>
+   <button class="btn primary" id="startBtn">START RACE</button>
+  </div>
+ </div>
+ <div class="controls" id="controls">
+  <button class="control" id="leftBtn">⬅️ LEFT</button>
+  <button class="control" id="rightBtn">RIGHT ➡️</button>
+ </div>
+ <div class="hint" id="hint">Touch LEFT / RIGHT to steer. Keyboard: ← → or A / D.</div>
+ <section class="panel" style="font-size:13px;color:#c2cbe0">Avoid the traffic. Every second you survive earns points. In Two Player mode, Player 1 uses A/D and Player 2 uses ←/→.</section>
+</main>
+<footer>GameMania • Built for mobile browsers</footer>
+<script>
+(() => {
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best'),speedEl=document.getElementById('speed');
+const overlay=document.getElementById('overlay'),titleEl=document.getElementById('overlayTitle'),textEl=document.getElementById('overlayText'),startBtn=document.getElementById('startBtn'),hint=document.getElementById('hint');
+const W=360,H=600, roadL=42,roadR=318,lanes=[88,134,180,226,272];
+let mode='bot',running=false,over=false,score=0,best=0,frame=0,roadOffset=0,spawn=0,traffic=[],players=[],botX=180,last=0;
+const colors=['#ff5c70','#ffbf45','#9a7cff','#47d9ff','#f3f4f8'];
+function car(x,y,color,w=28,h=48){ctx.fillStyle='#05080d66';ctx.fillRect(x-w/2+3,y-h/2+5,w,h);ctx.fillStyle=color;roundRect(x-w/2,y-h/2,w,h,7);ctx.fill();ctx.fillStyle='#bdefff';roundRect(x-w/2+5,y-h/2+7,w-10,12,3);ctx.fill();ctx.fillStyle='#101a2b';ctx.fillRect(x-w/2-3,y-h/2+8,4,10);ctx.fillRect(x+w/2-1,y-h/2+8,4,10);ctx.fillRect(x-w/2-3,y+h/2-17,4,10);ctx.fillRect(x+w/2-1,y+h/2-17,4,10);ctx.fillStyle='#ffeaa1';ctx.fillRect(x-w/2+4,y-h/2+1,5,3);ctx.fillRect(x+w/2-9,y-h/2+1,5,3)}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function drawRoad(){ctx.fillStyle='#267448';ctx.fillRect(0,0,W,H);ctx.fillStyle='#343b47';ctx.fillRect(roadL,0,roadR-roadL,H);ctx.fillStyle='#e8edf5';ctx.fillRect(roadL,0,4,H);ctx.fillRect(roadR-4,0,4,H);ctx.fillStyle='#f7d35a';ctx.fillRect(roadL+8,0,3,H);ctx.fillRect(roadR-11,0,3,H);ctx.strokeStyle='#d7dce4';ctx.lineWidth=3;ctx.setLineDash([25,22]);ctx.lineDashOffset=-roadOffset;[111,180,249].forEach(x=>{ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()});ctx.setLineDash([]);roadOffset=(roadOffset+4)%47}
+function draw(){ctx.clearRect(0,0,W,H);drawRoad();traffic.forEach(t=>car(t.x,t.y,t.color,27,46));players.forEach((p,i)=>car(p.x,p.y,i===0?'#42e8a5':'#ffb84d',28,48));if(mode==='bot'&&running){ctx.fillStyle='#ffffffcc';ctx.font='bold 12px system-ui';ctx.fillText('YOU',players[0].x-14,players[0].y+36);ctx.fillText('BOT',players[1].x-13,players[1].y+36)}}
+function reset(){score=0;frame=0;spawn=0;traffic=[];roadOffset=0;const p1={x:mode==='two'?125:180,y:490,alive:true};players=mode==='two'?[p1,{x:235,y:490,alive:true}]:[p1];if(mode==='bot')players.push({x:180,y:390,alive:true,bot:true});botX=180;scoreEl.textContent='0';speedEl.textContent='1';}
+function start(){reset();running=true;over=false;overlay.classList.add('hidden');last=performance.now();requestAnimationFrame(loop)}
+function end(message){running=false;over=true;best=Math.max(best,score);bestEl.textContent=best;titleEl.textContent='🏁 Race Over!';textEl.textContent=message+' Final score: '+score;startBtn.textContent='RACE AGAIN';overlay.classList.remove('hidden')}
+function spawnTraffic(){const lane=lanes[Math.floor(Math.random()*lanes.length)];traffic.push({x:lane,y:-35,color:colors[Math.floor(Math.random()*colors.length)],v:2+Math.random()*1.6})}
+function collide(a,b){return Math.abs(a.x-b.x)<24&&Math.abs(a.y-b.y)<38}
+const keys={};
+function loop(now){if(!running)return;const dt=Math.min((now-last)/16.67,2);last=now;frame++;score=Math.floor(frame/6);scoreEl.textContent=score;speedEl.textContent=(1+Math.floor(frame/300))+'x';spawn++;if(spawn>Math.max(25,62-Math.floor(frame/300)*3)){spawn=0;spawnTraffic()}
+traffic.forEach(t=>t.y+=(t.v+Math.min(frame/500,4))*dt);traffic=traffic.filter(t=>t.y<H+60);
+const speed=3.4*dt;
+if(mode==='two'){if(keys.a)players[0].x-=speed*1.8;if(keys.d)players[0].x+=speed*1.8;if(keys.ArrowLeft)players[1].x-=speed*1.8;if(keys.ArrowRight)players[1].x+=speed*1.8}
+else{const p=players[0];if(keys.ArrowLeft||keys.a)p.x-=speed*1.8;if(keys.ArrowRight||keys.d)p.x+=speed*1.8;
+if(mode==='bot'){const b=players[1];let target=180;const danger=traffic.filter(t=>t.y>b.y-100&&t.y<b.y+30).sort((a,b)=>Math.abs(a.x-b.x)-Math.abs(b.x-b.x))[0];if(danger)target=danger.x<180?250:110;b.x+=(target-b.x)*0.025*dt;const nearest=traffic.find(t=>Math.abs(t.x-b.x)<25&&Math.abs(t.y-b.y)<38);if(nearest){b.x=b.x<180?Math.min(278,b.x+5):Math.max(82,b.x-5)}}}
+players.forEach(p=>p.x=Math.max(roadL+23,Math.min(roadR-23,p.x)));
+for(const p of players){for(const t of traffic){if(collide(p,t)){end(mode==='two'?'A player crashed!':mode==='bot'?'You crashed!':'You crashed!');draw();return}}}
+if(mode==='two'&&Math.abs(players[0].x-players[1].x)<22&&Math.abs(players[0].y-players[1].y)<36){end('Players collided!');draw();return}
+draw();requestAnimationFrame(loop)}
+document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>{if(running)return;mode=btn.dataset.mode;document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b===btn));titleEl.textContent=mode==='bot'?'🤖 Bot Race':mode==='solo'?'🏎️ Solo Race':'👥 Two Player Race';textEl.textContent=mode==='bot'?'Race against the bot and avoid traffic.':mode==='solo'?'Drive as far as you can without hitting traffic.':'Player 1: A / D. Player 2: ← / →. Avoid traffic and each other.';hint.textContent=mode==='two'?'Player 1: A / D (keyboard). Player 2: ← / →. On phone, use the two buttons to steer Player 1.':'Touch LEFT / RIGHT to steer. Keyboard: ← → or A / D.';draw();}));
+startBtn.addEventListener('click',start);
+window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[e.key]=true;if(!running&&e.key==='Enter')start()});
+window.addEventListener('keyup',e=>keys[e.key]=false);
+function bindHold(id,key){const el=document.getElementById(id);const down=e=>{e.preventDefault();keys[key]=true};const up=e=>{e.preventDefault();keys[key]=false};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',up)}
+bindHold('leftBtn','ArrowLeft');bindHold('rightBtn','ArrowRight');
+draw();
+})();
+</script>
+</body>
+</html>
